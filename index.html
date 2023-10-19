@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="script.js"></script>
+    <style>
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
+      th,
+      td {
+        padding: 8px;
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div>Nhập file:</div>
+    <input type="file" id="fileInput" />
+    <pre id="fileContent" style="display: none"></pre>
+    <div>Nhập số:</div>
+    <input type="number" id="numA" />
+    <div>Nhập độ sai khác:</div>
+    <input type="number" id="numB" />
+    <br />
+    <button id="addBtn">Chạy</button>
+    <table>
+      <tbody id="table-body"></tbody>
+    </table>
+    <br />
+    <button id="exportButton">Tải kết quả xuống</button>
+    <script>
+      (async () => {
+        const response = await fetch("caesar.wasm");
+        const file = await response.arrayBuffer();
+        const wasm = await WebAssembly.instantiate(file);
+        const { memory, caesarDecrypt } = wasm.instance.exports;
+
+        const fileInput = document.getElementById("fileInput");
+        const fileContent = document.getElementById("fileContent");
+        let content = null;
+        let contenConvert = null;
+        let dataResult = null;
+        let resultData = null;
+
+        fileInput.addEventListener("change", function () {
+          const selectedFile = fileInput.files[0]; // Lấy tệp đã chọn
+          if (selectedFile) {
+            const reader = new FileReader(); // Tạo một đối tượng FileReader
+
+            reader.onload = function (e) {
+              content = e.target.result.trim(); // Dữ liệu tệp sẽ được lưu ở đây
+              fileContent.textContent = content; // Hiển thị nội dung tệp
+              contenConvert = convertData(content);
+            };
+
+            reader.readAsText(selectedFile); // Đọc tệp như văn bản
+          } else {
+            fileContent.textContent = "Không có tệp được chọn";
+          }
+        });
+        function convertData(text) {
+          // Chia đoạn văn bản thành các dòng
+          const lines = text.split("\n");
+
+          // Biến lưu trữ nội dung chuỗi hiện tại
+          let currentSequence = "";
+          const sequences = [];
+
+          // Lặp qua từng dòng và xử lý nội dung chuỗi
+          for (const line of lines) {
+            // Bỏ qua dòng bắt đầu bằng ">"
+            if (line.startsWith(">")) {
+              // Lưu chuỗi trước đó vào mảng nếu có nội dung
+              if (currentSequence.length > 0) {
+                sequences.push(currentSequence);
+                currentSequence = "";
+              }
+            } else {
+              // Nếu không phải dòng bắt đầu bằng ">", thêm nội dung vào chuỗi hiện tại
+              currentSequence += line.trim();
+            }
+          }
+
+          // Lưu chuỗi cuối cùng vào mảng (nếu có)
+          if (currentSequence.length > 0) {
+            sequences.push(currentSequence);
+          }
+          return sequences.join(",");
+        }
+        // Hàm để tạo và tải xuống tệp
+        function downloadToFile(content, filename, contentType) {
+          const a = document.createElement("a");
+          const file = new Blob([content], { type: contentType });
+
+          a.href = URL.createObjectURL(file);
+          a.download = filename;
+          a.click();
+
+          URL.revokeObjectURL(a.href);
+        }
+
+        // Sự kiện click cho nút xuất dữ liệu
+        document
+          .getElementById("exportButton")
+          .addEventListener("click", function () {
+            const dataToExport = resultData;
+            const filename = "ketqua.txt";
+            const contentType = "text/plain";
+
+            downloadToFile(dataToExport, filename, contentType);
+          });
+        document.getElementById("addBtn").addEventListener("click", () => {
+          let numA = 0,
+            numB = 0,
+            data = "";
+          numA = document.getElementById("numA").value;
+          numB = document.getElementById("numB").value;
+          const inputStrings = contenConvert.split(",");
+          const substrings = getAllSubstringsFromMultipleStrings(
+            inputStrings,
+            Number(numA) - Number(numB)
+          );
+          const uniqueArray = [
+            ...new Set(findCommonElementsInArrays(substrings)),
+          ];
+          const dataDef = getDef(inputStrings, Number(numA));
+          resultData = result(uniqueArray, dataDef);
+          const tableBody = document.getElementById("table-body");
+          let row = document.createElement("tr");
+
+          resultData.forEach((item, index) => {
+            const cell = document.createElement("td");
+            cell.textContent = item;
+            row.appendChild(cell);
+
+            if ((index + 1) % 10 === 0 || index === resultData.length - 1) {
+              tableBody.appendChild(row);
+              row = document.createElement("tr");
+            }
+          });
+          if (contenConvert) {
+            data = contenConvert.toLowerCase() + numA + numB;
+            const myArray = new Int32Array(memory.buffer, 0, data.length);
+            encode(data, myArray);
+            caesarDecrypt(myArray, myArray.length);
+            document.getElementById("result").innerText =
+              decode(myArray).trim();
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
